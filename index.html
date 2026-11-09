@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Large File Chunked Upload Demo</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        .container { max-width: 800px; margin: auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #0056b3; text-align: center; margin-bottom: 30px; }
+        input[type="file"] { display: block; margin-bottom: 20px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; width: calc(100% - 22px); }
+        button { background-color: #007bff; color: white; padding: 12px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; transition: background-color 0.3s ease; }
+        button:hover { background-color: #0056b3; }
+        .file-list { margin-top: 20px; border-top: 1px solid #eee; padding-top: 20px; }
+        .file-item { background-color: #e9ecef; padding: 10px 15px; margin-bottom: 10px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
+        .file-item span { font-weight: bold; }
+        .progress-bar-container { width: 150px; height: 10px; background-color: #ddd; border-radius: 5px; overflow: hidden; margin-left: 15px; }
+        .progress-bar { height: 100%; width: 0%; background-color: #28a745; border-radius: 5px; transition: width 0.1s ease-in-out; }
+        .status-message { margin-top: 20px; padding: 10px; background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; border-radius: 4px; display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Large File & Multiple Selection Upload Demo</h1>
+
+        <input type="file" id="fileInput" multiple accept=".pdf,.zip,.txt,.jpg,.png">
+        <button id="uploadButton">Start Upload</button>
+
+        <div id="fileList" class="file-list">
+            <!-- Selected files will be listed here -->
+            <p>No files selected.</p>
+        </div>
+
+        <div id="statusMessage" class="status-message"></div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const uploadButton = document.getElementById('uploadButton');
+        const fileListDiv = document.getElementById('fileList');
+        const statusMessageDiv = document.getElementById('statusMessage');
+
+        // Define the chunk size (e.g., 1MB for demonstration)
+        // In a real application, this might be 5MB, 10MB, or more depending on network conditions and server capabilities.
+        const CHUNK_SIZE = 1024 * 1024; // 1 MB
+
+        let selectedFiles = [];
+
+        fileInput.addEventListener('change', (event) => {
+            selectedFiles = Array.from(event.target.files);
+            displaySelectedFiles();
+            statusMessageDiv.style.display = 'none';
+        });
+
+        uploadButton.addEventListener('click', async () => {
+            if (selectedFiles.length === 0) {
+                alert('Please select files first!');
+                return;
+            }
+
+            uploadButton.disabled = true;
+            statusMessageDiv.textContent = 'Starting uploads...';
+            statusMessageDiv.style.display = 'block';
+
+            for (const file of selectedFiles) {
+                await uploadFile(file); // Process files sequentially for simpler demo, could be parallel
+            }
+
+            statusMessageDiv.textContent = 'All files processed. Check network tab for simulated chunk requests.';
+            uploadButton.disabled = false;
+        });
+
+        function displaySelectedFiles() {
+            fileListDiv.innerHTML = '';
+            if (selectedFiles.length === 0) {
+                fileListDiv.innerHTML = '<p>No files selected.</p>';
+                return;
+            }
+
+            selectedFiles.forEach(file => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.innerHTML = `
+                    <span>${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)</span>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="progress-${file.name.replace(/\s/g, '-')}" style="width: 0%;"></div>
+                    </div>
+                `;
+                fileListDiv.appendChild(fileItem);
+            });
+        }
+
+        async function uploadFile(file) {
+            const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+            let uploadedChunks = 0;
+            const fileId = file.name.replace(/\s/g, '-'); // Simple ID for progress bar
+            const progressBar = document.getElementById(`progress-${fileId}`);
+
+            console.log(`Starting upload for: ${file.name} (${totalChunks} chunks)`);
+
+            for (let i = 0; i < totalChunks; i++) {
+                const start = i * CHUNK_SIZE;
+                const end = Math.min(start + CHUNK_SIZE, file.size);
+                const chunk = file.slice(start, end);
+
+                const formData = new FormData();
+                formData.append('file', chunk, file.name); // Append the chunk
+                formData.append('fileName', file.name);
+                formData.append('fileSize', file.size);
+                formData.append('chunkIndex', i);
+                formData.append('totalChunks', totalChunks);
+                formData.append('chunkSize', CHUNK_SIZE);
+
+                try {
+                    // --- CORE CONCEPT: CHUNKED UPLOAD SIMULATION ---
+                    // This `fetch` call simulates sending a single chunk to a backend server.
+                    // In a real application, the server would receive these chunks and reassemble them.
+                    // The URL `/upload-chunk` is a placeholder and will result in a 404 error
+                    // because there's no backend server running. However, you can observe
+                    // the network requests in your browser's developer tools to see the chunks being sent.
+                    const response = await fetch('/upload-chunk', {
+                        method: 'POST',
+                        body: formData,
+                        // No 'Content-Type' header needed for FormData, browser sets it automatically
+                    });
+
+                    if (!response.ok) {
+                        console.error(`Error uploading chunk ${i+1} for ${file.name}:`, response.statusText);
+                        // Implement retry logic here in a real app
+                        alert(`Failed to upload chunk ${i+1} for ${file.name}. See console for details.`);
+                        return; // Stop processing this file on error
+                    }
+
+                    uploadedChunks++;
+                    const progress = (uploadedChunks / totalChunks) * 100;
+                    if (progressBar) {
+                        progressBar.style.width = `${progress}%`;
+                    }
+                    console.log(`Chunk ${i+1}/${totalChunks} for ${file.name} uploaded. Progress: ${progress.toFixed(2)}%`);
+
+                } catch (error) {
+                    console.error(`Network error during chunk upload for ${file.name}:`, error);
+                    alert(`Network error during upload for ${file.name}. See console for details.`);
+                    return; // Stop processing this file on error
+                }
+            }
+            console.log(`Finished uploading: ${file.name}`);
+        }
+    </script>
+</body>
+</html>
